@@ -3,13 +3,14 @@ import pandas as pd
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer, util
 from scipy.stats import pearsonr, spearmanr
+import os
 
 st.set_page_config(page_title="Semantic Text Similarity", layout="wide")
 st.title("Semantic Text Similarity 🌐")
 st.write("Сравнивайте смысловое сходство предложений, используйте готовые датасеты (STS, QQP) или загружайте свои CSV.")
 
 # -------------------------
-# Доступные модели
+# Модели
 # -------------------------
 models_available = ["BERT", "RoBERTa", "MiniLM"]
 
@@ -28,7 +29,7 @@ def load_model(name):
 st.subheader("Ввод предложений вручную")
 sent1 = st.text_area("Предложение 1 для ручного ввода", "")
 sent2 = st.text_area("Предложение 2 для ручного ввода", "")
-models_manual = st.multiselect("Выберите модели для ручного ввода:", models_available, default=models_available)
+models_manual = st.multiselect("Выберите модели для ручного ввода:", models_available, default=models_available, key="manual_models")
 
 if st.button("Сравнить вручную"):
     if sent1.strip() == "" or sent2.strip() == "":
@@ -88,6 +89,14 @@ if uploaded_file:
             st.success("Готово!")
             st.dataframe(results_df.head())
 
+            # Создание папки data если не существует
+            if not os.path.exists("data"):
+                os.makedirs("data")
+            
+            results_df.to_csv("data/results.csv", index=False)
+            st.info("Результаты сохранены в data/results.csv")
+
+            # Метрики, если есть score
             if "score" in df.columns:
                 st.subheader("Метрики качества моделей")
                 metrics_list = []
@@ -99,11 +108,8 @@ if uploaded_file:
 
                 st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
 
-            results_df.to_csv("data/results.csv", index=False)
-            st.info("Результаты сохранены в data/results.csv")
-
 # ==========================================================
-# 3) Готовые датасеты (HuggingFace)
+# 3) HuggingFace датасеты
 # ==========================================================
 st.subheader("Готовые датасеты (HuggingFace)")
 
@@ -148,6 +154,13 @@ if st.button("Загрузить выбранный датасет"):
 
         st.success("Готово!")
         st.dataframe(results_df.head())
+
+        # Создание папки data если не существует
+        if not os.path.exists("data"):
+            os.makedirs("data")
+        
+        results_df.to_csv("data/results.csv", index=False)
+        st.info("Результаты сохранены в data/results.csv")
 
         st.subheader("Метрики качества моделей")
         metrics_list = []
