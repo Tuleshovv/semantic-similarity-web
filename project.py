@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
+from datasets import load_dataset
 from sentence_transformers import SentenceTransformer, util
 from scipy.stats import pearsonr, spearmanr
 
 st.set_page_config(page_title="Semantic Text Similarity", layout="wide")
 st.title("Semantic Text Similarity 🌐")
-st.write("Сравнивайте смысловое сходство предложений с несколькими моделями и оценивайте результаты на датасете")
+st.write("Сравнивайте смысловое сходство предложений, используйте готовые датасеты (STS, QQP) или загружайте свои CSV.")
 
 # -------------------------
 # Доступные модели
@@ -21,13 +22,14 @@ def load_model(name):
     else:
         return SentenceTransformer('all-MiniLM-L6-v2')
 
-# -------------------------
-# Ввод вручную
-# -------------------------
+
+# ==========================================================
+# 1) Ввод вручную
+# ==========================================================
 st.subheader("Ввод предложений вручную")
 sent1 = st.text_area("Предложение 1", "")
 sent2 = st.text_area("Предложение 2", "")
-models_to_use_manual = st.multiselect("Выберите модели для сравнения:", models_available, default=models_available)
+models_to_use_manual = st.multiselect("Выберите модели:", models_available, default=models_available)
 
 if st.button("Сравнить вручную"):
     if sent1.strip() == "" or sent2.strip() == "":
@@ -43,37 +45,36 @@ if st.button("Сравнить вручную"):
             similarity = float(util.cos_sim(emb1, emb2))
             results[model_name] = similarity
 
-        st.subheader("Результаты сходства (ввод вручную):")
+        st.subheader("Результаты сходства:")
         for name, sim in results.items():
             st.write(f"**{name}**: {sim:.3f}")
             if sim > 0.8:
-                st.success("✅ Предложения очень похожи по смыслу.")
+                st.success("Очень похожи")
             elif sim > 0.5:
-                st.info("🟡 Предложения частично похожи.")
+                st.info("Частично похожи")
             else:
-                st.warning("❌ Предложения разные по смыслу.")
+                st.warning("Разные по смыслу")
+
         st.bar_chart(results)
 
-# -------------------------
-# Загрузка датасета
-# -------------------------
+
+# ==========================================================
+# 2) Загрузка CSV
+# ==========================================================
 st.subheader("Загрузка датасета (CSV)")
-uploaded_file = st.file_uploader("Выберите CSV файл", type="csv")
+uploaded_file = st.file_uploader("Выберите CSV", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    st.write("Предпросмотр данных:")
+    st.write("Предпросмотр:")
     st.dataframe(df.head())
 
-    models_to_use_dataset = st.multiselect("Выберите модели для анализа датасета:", models_available, default=models_available)
+    models_to_use_dataset = st.multiselect("Выберите модели:", models_available, default=models_available)
 
-    if st.button("Вычислить сходство для всего датасета"):
+    if st.button("Вычислить сходство CSV"):
         if not all(col in df.columns for col in ["sentence1", "sentence2"]):
-            st.error("CSV должен содержать столбцы 'sentence1' и 'sentence2'")
-        elif not models_to_use_dataset:
-            st.warning("Выберите хотя бы одну модель!")
+            st.error("CSV должен содержать 'sentence1' и 'sentence2'")
         else:
-            st.info("Вычисление сходства, это может занять время... ⏳")
             results_df = df.copy()
 
             for model_name in models_to_use_dataset:
@@ -82,25 +83,80 @@ if uploaded_file:
                 for s1, s2 in zip(df["sentence1"], df["sentence2"]):
                     emb1 = model.encode(s1, convert_to_tensor=True)
                     emb2 = model.encode(s2, convert_to_tensor=True)
-                    similarity = float(util.cos_sim(emb1, emb2))
-                    sims.append(similarity)
+                    sims.append(float(util.cos_sim(emb1, emb2)))
                 results_df[f"{model_name}_similarity"] = sims
 
-            st.success("Вычисление завершено ✅")
+            st.success("Готово!")
             st.dataframe(results_df.head())
 
-            # Вычисляем Pearson и Spearman, если есть колонка score
             if "score" in df.columns:
-                st.subheader("Оценка моделей по метрикам")
-                metrics = []
+                st.subheader("Метрики")
+                metrics_list = []
                 for model_name in models_to_use_dataset:
-                    pearson_corr, _ = pearsonr(df["score"], results_df[f"{model_name}_similarity"])
-                    spearman_corr, _ = spearmanr(df["score"], results_df[f"{model_name}_similarity"])
-                    st.write(f"**{model_name}** — Pearson: {pearson_corr:.3f}, Spearman: {spearman_corr:.3f}")
-                    metrics.append({"Model": model_name, "Pearson": pearson_corr, "Spearman": spearman_corr})
-                st.bar_chart(pd.DataFrame(metrics).set_index("Model"))
+                    pear, _ = pearsonr(df["score"], results_df[f"{model_name}_similarity"])
+                    spear, _ = spearmanr(df["score"], results_df[f"{model_name}_similarity"])
+                    metrics_list.append({"Model": model_name, "Pearson": pear, "Spearman": spear})
+                    st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}")
 
-            # Сохраняем результаты
+                st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
+
             results_df.to_csv("data/results.csv", index=False)
-            st.info("Результаты сохранены в data/results.csv")
+            st.info("Сохранено → data/results.csv")
 
+
+# ==========================================================
+# 3) ГОТОВЫЕ ДАТАСЕТЫ: STS, QQP
+# ==========================================================
+st.subheader("Готовые датасеты (HuggingFace)")
+
+dataset_choice = st.selectbox(
+    "Выберите датасет:",
+    ["STS Benchmark", "Quora Question Pairs (QQP)"]
+)
+
+if st.button("Загрузить датасет"):
+    if dataset_choice == "STS Benchmark":
+        data = load_dataset("stsb_multi_mt", name="en")
+        df = data["test"].to_pandas()
+        df.rename(columns={"similarity_score": "score"}, inplace=True)
+
+    elif dataset_choice == "Quora Question Pairs (QQP)":
+        data = load_dataset("glue", "qqp")
+        df = data["validation"].to_pandas()
+        df.rename(columns={
+            "question1": "sentence1",
+            "question2": "sentence2",
+            "label": "score"
+        }, inplace=True)
+
+    st.success(f"{dataset_choice} успешно загружен!")
+    st.dataframe(df.head())
+
+    models_ready = st.multiselect("Выберите модели:", models_available, default=models_available)
+
+    if st.button("Анализировать датасет"):
+        results_df = df.copy()
+
+        for model_name in models_ready:
+            model = load_model(model_name)
+
+            sims = []
+            for s1, s2 in zip(df["sentence1"], df["sentence2"]):
+                emb1 = model.encode(s1, convert_to_tensor=True)
+                emb2 = model.encode(s2, convert_to_tensor=True)
+                sims.append(float(util.cos_sim(emb1, emb2)))
+
+            results_df[f"{model_name}_similarity"] = sims
+
+        st.success("Готово!")
+        st.dataframe(results_df.head())
+
+        st.subheader("Метрики качества моделей")
+        metrics_list = []
+        for model_name in models_ready:
+            pear, _ = pearsonr(df["score"], results_df[f"{model_name}_similarity"])
+            spear, _ = spearmanr(df["score"], results_df[f"{model_name}_similarity"])
+            metrics_list.append({"Model": model_name, "Pearson": pear, "Spearman": spear})
+            st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}")
+
+        st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
