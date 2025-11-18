@@ -2,126 +2,106 @@ import streamlit as st
 import pandas as pd
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer, util
-from sklearn.metrics import mean_squared_error, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import (
+    mean_squared_error, mean_absolute_error, r2_score,
+    accuracy_score, precision_score, recall_score, f1_score
+)
 from scipy.stats import pearsonr, spearmanr
 import numpy as np
 import os
 
-st.set_page_config(page_title="Semantic Text Similarity", layout="wide")
-st.title("Semantic Text Similarity 🌐")
-st.write("Сравнивайте смысловое сходство предложений с использованием BERT и RoBERTa.")
+st.set_page_config(page_title="Semantic Text Similarity HF", layout="wide")
+st.title("Semantic Text Similarity с HuggingFace 🌐")
 
 # -------------------------
 # Модели
 # -------------------------
-models_available = ["BERT", "RoBERTa"]
+models_available = ["BERT", "RoBERTa", "MiniLM"]
 
 @st.cache_resource
 def load_model(name):
     if name == "BERT":
         return SentenceTransformer('bert-base-nli-mean-tokens')
-    else:
+    elif name == "RoBERTa":
         return SentenceTransformer('roberta-base-nli-stsb-mean-tokens')
-
-# ==========================================================
-# 1) Ввод вручную
-# ==========================================================
-st.subheader("Ввод предложений вручную")
-sent1 = st.text_area("Предложение 1", "")
-sent2 = st.text_area("Предложение 2", "")
-models_manual = st.multiselect("Выберите модели:", models_available, default=models_available, key="manual_models")
-
-if st.button("Сравнить вручную"):
-    if sent1.strip() == "" or sent2.strip() == "":
-        st.warning("Введите оба предложения!")
-    elif not models_manual:
-        st.warning("Выберите хотя бы одну модель!")
     else:
-        results = {}
-        for model_name in models_manual:
+        return SentenceTransformer('all-MiniLM-L6-v2')
+
+# -------------------------
+# Выбор датасета HuggingFace
+# -------------------------
+st.subheader("Выберите HuggingFace датасет")
+dataset_choice = st.selectbox("Датасет:", ["STS Benchmark", "Quora Question Pairs (QQP)"])
+split_choice = st.selectbox("Split:", ["train", "validation", "test"])
+
+if st.button("Загрузить датасет"):
+    if dataset_choice == "STS Benchmark":
+        dataset = load_dataset("glue", "stsb", split=split_choice)
+        df = pd.DataFrame(dataset)
+        df.rename(columns={"sentence1":"sentence1","sentence2":"sentence2","label":"score"}, inplace=True)
+    elif dataset_choice == "Quora Question Pairs (QQP)":
+        dataset = load_dataset("glue", "qqp", split=split_choice)
+        df = pd.DataFrame(dataset)
+        df.rename(columns={"question1":"sentence1","question2":"sentence2","label":"label"}, inplace=True)
+
+    st.success(f"{dataset_choice} ({split_choice}) загружен! Всего строк: {len(df)}")
+    st.dataframe(df.head(10))
+
+    models_hf = st.multiselect("Выберите модели:", models_available, default=models_available)
+
+    if st.button("Анализировать весь датасет"):
+        st.info("Вычисление сходства... ⏳")
+        results_df = df.copy()
+
+        # Вычисление косинусного сходства для каждой модели
+        for model_name in models_hf:
             model = load_model(model_name)
-            emb1 = model.encode(sent1, convert_to_tensor=True, normalize_embeddings=True)
-            emb2 = model.encode(sent2, convert_to_tensor=True, normalize_embeddings=True)
-            similarity = float(util.cos_sim(emb1, emb2))
-            results[model_name] = similarity
+            sims = []
+            for s1, s2 in zip(df["sentence1"], df["sentence2"]):
+                emb1 = model.encode(s1, convert_to_tensor=True)
+                emb2 = model.encode(s2, convert_to_tensor=True)
+                sims.append(float(util.cos_sim(emb1, emb2)))
+            results_df[f"{model_name}_similarity"] = sims
 
-        st.subheader("Результаты сходства:")
-        for name, sim in results.items():
-            st.write(f"**{name}**: {sim:.3f}")
-            if sim > 0.8:
-                st.success("Очень похожи")
-            elif sim > 0.5:
-                st.info("Частично похожи")
-            else:
-                st.warning("Разные по смыслу")
+        st.success("Готово! Сходство рассчитано для всех строк.")
+        st.dataframe(results_df.head(10))
 
-        st.bar_chart(results)
+        # Сохранение результатов
+        if not os.path.exists("data"):
+            os.makedirs("data")
+        results_df.to_csv("data/results.csv", index=False)
+        st.info("Результаты сохранены в data/results.csv")
 
-# ==========================================================
-# 2) Загрузка CSV
-# ==========================================================
-st.subheader("Загрузка датасета (CSV)")
-uploaded_file = st.file_uploader("Выберите CSV файл", type="csv", key="csv_uploader")
+        # -------------------------
+        # Метрики регрессии
+        # -------------------------
+        if "score" in df.columns:
+            st.subheader("Метрики качества (регрессия)")
+            for model_name in models_hf:
+                y_true = df["score"]
+                y_pred = results_df[f"{model_name}_similarity"]
+                st.write(f"**{model_name}**:")
+                st.write(f"- MSE: {mean_squared_error(y_true, y_pred):.3f}")
+                st.write(f"- RMSE: {np.sqrt(mean_squared_error(y_true, y_pred)):.3f}")
+                st.write(f"- MAE: {mean_absolute_error(y_true, y_pred):.3f}")
+                st.write(f"- R²: {r2_score(y_true, y_pred):.3f}")
+                st.write(f"- Pearson: {pearsonr(y_true, y_pred)[0]:.3f}")
+                st.write(f"- Spearman: {spearmanr(y_true, y_pred)[0]:.3f}")
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.write("Предпросмотр:")
-    st.dataframe(df.head())
-
-    models_csv = st.multiselect("Выберите модели для CSV:", models_available, default=models_available, key="csv_models")
-
-    if st.button("Вычислить сходство для CSV"):
-        if not all(col in df.columns for col in ["sentence1", "sentence2"]):
-            st.error("CSV должен содержать 'sentence1' и 'sentence2'")
-        else:
-            results_df = df.copy()
-            st.info("Вычисление сходства... ⏳")
-
-            for model_name in models_csv:
-                model = load_model(model_name)
-                sims = []
-                for s1, s2 in zip(df["sentence1"], df["sentence2"]):
-                    emb1 = model.encode(s1, convert_to_tensor=True, normalize_embeddings=True)
-                    emb2 = model.encode(s2, convert_to_tensor=True, normalize_embeddings=True)
-                    sims.append(float(util.cos_sim(emb1, emb2)))
-                results_df[f"{model_name}_similarity"] = sims
-
-            st.success("Готово!")
-            st.dataframe(results_df.head())
-
-            # Сохранение и возможность скачать
-            if not os.path.exists("data"):
-                os.makedirs("data")
-            results_df.to_csv("data/results.csv", index=False)
-            st.info("Результаты сохранены в data/results.csv")
-
-            st.download_button(
-                label="Скачать CSV с результатами",
-                data=results_df.to_csv(index=False).encode('utf-8'),
-                file_name='results.csv',
-                mime='text/csv',
-            )
-
-            # Метрики (если есть оценка)
-            if "score" in df.columns:
-                st.subheader("Метрики качества моделей (регрессия)")
-                for model_name in models_csv:
-                    mse = mean_squared_error(df["score"], results_df[f"{model_name}_similarity"])
-                    rmse = np.sqrt(mse)
-                    pear, _ = pearsonr(df["score"], results_df[f"{model_name}_similarity"])
-                    spear, _ = spearmanr(df["score"], results_df[f"{model_name}_similarity"])
-                    st.write(f"**{model_name}** — MSE: {mse:.3f}, RMSE: {rmse:.3f}, Pearson: {pear:.3f}, Spearman: {spear:.3f}")
-
-            if "label" in df.columns:
-                st.subheader("Метрики качества моделей (классификация)")
-                for model_name in models_csv:
-                    pred = np.round(results_df[f"{model_name}_similarity"].values)
-                    accuracy = accuracy_score(df["label"], pred)
-                    precision = precision_score(df["label"], pred)
-                    recall = recall_score(df["label"], pred)
-                    f1 = f1_score(df["label"], pred)
-                    st.write(f"**{model_name}** — Accuracy: {accuracy:.3f}, Precision: {precision:.3f}, Recall: {recall:.3f}, F1-score: {f1:.3f}")
-
+        # -------------------------
+        # Метрики классификации
+        # -------------------------
+        if "label" in df.columns:
+            st.subheader("Метрики качества (классификация)")
+            for model_name in models_hf:
+                y_true = df["label"]
+                # Для классификации округляем cosine similarity к 0 или 1
+                y_pred = np.round(results_df[f"{model_name}_similarity"].values).astype(int)
+                st.write(f"**{model_name}**:")
+                st.write(f"- Accuracy: {accuracy_score(y_true, y_pred):.3f}")
+                st.write(f"- Precision: {precision_score(y_true, y_pred, zero_division=0):.3f}")
+                st.write(f"- Recall: {recall_score(y_true, y_pred, zero_division=0):.3f}")
+                st.write(f"- F1-score: {f1_score(y_true, y_pred, zero_division=0):.3f}")
 
 
 
