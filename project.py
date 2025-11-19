@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datasets import load_dataset
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sentence_transformers import SentenceTransformer, util
 from scipy.stats import pearsonr, spearmanr
 import os
@@ -97,17 +98,43 @@ if uploaded_file:
             results_df.to_csv("data/results.csv", index=False)
             st.info("Результаты сохранены в data/results.csv")
 
-            # Метрики, если есть score
-            if "score" in df.columns:
-                st.subheader("Метрики качества моделей")
-                metrics_list = []
-                for model_name in models_csv:
-                    pear, _ = pearsonr(df["score"], results_df[f"{model_name}_similarity"])
-                    spear, _ = spearmanr(df["score"], results_df[f"{model_name}_similarity"])
-                    metrics_list.append({"Model": model_name, "Pearson": pear, "Spearman": spear})
-                    st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}")
+           # Метрики, если есть score
+if "score" in df.columns:
+    st.subheader("Метрики качества моделей")
 
-                st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
+    metrics_list = []
+
+    for model_name in models_csv:
+        y_true = df["score"]
+        y_pred = results_df[f"{model_name}_similarity"]
+
+        pear, _ = pearsonr(y_true, y_pred)
+        spear, _ = spearmanr(y_true, y_pred)
+        mse = mean_squared_error(y_true, y_pred)
+        rmse = mean_squared_error(y_true, y_pred, squared=False)
+        mae = mean_absolute_error(y_true, y_pred)
+        r2 = r2_score(y_true, y_pred)
+
+        metrics_list.append({
+            "Model": model_name,
+            "Pearson": pear,
+            "Spearman": spear,
+            "MSE": mse,
+            "RMSE": rmse,
+            "MAE": mae,
+            "R²": r2
+        })
+
+        st.write(f"### 📌 {model_name}")
+        st.write(f"- **Pearson**: {pear:.4f}")
+        st.write(f"- **Spearman**: {spear:.4f}")
+        st.write(f"- **MSE**: {mse:.4f}")
+        st.write(f"- **RMSE**: {rmse:.4f}")
+        st.write(f"- **MAE**: {mae:.4f}")
+        st.write(f"- **R² Score**: {r2:.4f}")
+
+    st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
+
 
 # ==========================================================
 # 3) HuggingFace датасеты
@@ -172,4 +199,5 @@ if st.button("Загрузить выбранный датасет"):
             st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}")
 
         st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
+
 
