@@ -17,11 +17,12 @@ models_available = ["BERT", "RoBERTa", "MiniLM"]
 @st.cache_resource
 def load_model(name):
     if name == "BERT":
-        return SentenceTransformer('bert-base-nli-mean-tokens')
+        return SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
     elif name == "RoBERTa":
-        return SentenceTransformer('roberta-base-nli-stsb-mean-tokens')
+        return SentenceTransformer("sentence-transformers/stsb-roberta-large")
     else:
-        return SentenceTransformer('all-MiniLM-L6-v2')
+        return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
 
 # ==========================================================
 # 1) Ввод вручную
@@ -171,3 +172,4 @@ if st.button("Загрузить выбранный датасет"):
             st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}")
 
         st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
+
