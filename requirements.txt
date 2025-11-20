@@ -1,11 +1,12 @@
 streamlit
 pandas
 datasets
-sentence-transformers
-transformers
+sentence-transformers==2.2.2
+transformers==4.30.2
 torch
 scikit-learn
 scipy
+
 
 
 
