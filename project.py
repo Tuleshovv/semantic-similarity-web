@@ -7,6 +7,7 @@ from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
 import os
+import time
 
 st.set_page_config(page_title="Semantic Text Similarity + Train", layout="wide")
 st.title("Semantic Text Similarity 🌐 с обучением и метриками")
@@ -129,46 +130,50 @@ if uploaded_file:
 st.subheader("HuggingFace датасеты и обучение модели")
 dataset_choice = st.selectbox("Выберите датасет:", ["STS Benchmark (EN)", "RuSTS (RU)"])
 
+if "train_clicked" not in st.session_state:
+    st.session_state.train_clicked = False
+
 if st.button("Загрузить датасет"):
+    st.session_state.train_clicked = False  # сброс для нового датасета
     if dataset_choice == "STS Benchmark (EN)":
         data = load_dataset("stsb_multi_mt", name="en")
         df = data["train"].to_pandas()
         df.rename(columns={"sentence1":"sentence1","sentence2":"sentence2","similarity_score":"score"}, inplace=True)
-        df["score"] = df["score"] / 5.0  # нормализация 0-1
+        df["score"] = df["score"] / 5.0
     else:
         data = load_dataset("ai-forever/ru-stsbenchmark-sts", split="train")
         df = data.to_pandas()
         df.rename(columns={"sentence1":"sentence1","sentence2":"sentence2","similarity_score":"score"}, inplace=True)
-        df["score"] = df["score"] / 5.0  # нормализация 0-1
+        df["score"] = df["score"] / 5.0
 
     st.success(f"{dataset_choice} загружен! Всего строк: {len(df)}")
     st.dataframe(df.head())
 
-    model_to_train = st.selectbox("Выберите модель для обучения:", models_available, key="train_model")
-    epochs = st.number_input("Количество эпох:", min_value=1, max_value=10, value=3, step=1)
+model_to_train = st.selectbox("Выберите модель для обучения:", models_available, key="train_model")
+epochs = st.number_input("Количество эпох:", min_value=1, max_value=10, value=3, step=1)
 
-    if st.button("Обучить модель"):
-        st.info("Обучение модели... ⏳")
-        model = load_model(model_to_train)
+if st.button("Обучить модель"):
+    st.session_state.train_clicked = True
 
-        # Создание InputExample
-        train_examples = [InputExample(texts=[row["sentence1"], row["sentence2"]], label=row["score"]) 
-                          for _, row in df.iterrows()]
+if st.session_state.train_clicked:
+    st.info("Обучение модели... ⏳")
+    model = load_model(model_to_train)
 
-        train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
-        train_loss = losses.CosineSimilarityLoss(model=model)
+    # Создание InputExample
+    train_examples = [InputExample(texts=[row["sentence1"], row["sentence2"]], label=row["score"]) 
+                      for _, row in df.iterrows()]
 
-        # Fine-tuning
-        model.fit(
-            train_objectives=[(train_dataloader, train_loss)],
-            epochs=epochs,
-            warmup_steps=100
-        )
+    train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
+    train_loss = losses.CosineSimilarityLoss(model=model)
 
-        # Сохранение модели
-        save_path = f"models/{model_to_train.replace(' ', '_')}_finetuned"
-        if not os.path.exists("models"):
-            os.makedirs("models")
-        model.save(save_path)
-        st.success(f"Модель обучена и сохранена в {save_path}")
-        st.info("Теперь её можно использовать для ручного ввода или CSV!")
+    for epoch in range(epochs):
+        st.write(f"Epoch {epoch+1}/{epochs}")
+        model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=50)
+        time.sleep(0.5)  # для визуализации прогресса
+
+    save_path = f"models/{model_to_train.replace(' ', '_')}_finetuned"
+    if not os.path.exists("models"):
+        os.makedirs("models")
+    model.save(save_path)
+    st.success(f"Модель обучена и сохранена в {save_path}")
+    st.session_state.train_clicked = False
