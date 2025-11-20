@@ -2,30 +2,25 @@ import streamlit as st
 import pandas as pd
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer, util
-from sklearn.metrics import (
-    mean_squared_error, mean_absolute_error, r2_score
-)
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import pearsonr, spearmanr
 import numpy as np
 import os
 
 st.set_page_config(page_title="Semantic Text Similarity", layout="wide")
 st.title("Semantic Text Similarity 🌐")
-
 st.write("""
 Сравнение смыслового сходства предложений.  
-Работает с английскими и русскими датасетами, поддерживает ввод вручную и загрузку CSV.
+Поддерживаются английские и русские датасеты, ввод вручную и CSV.
 """)
 
 # -------------------------
-# Модели (тезисно)
+# Модели
 # -------------------------
 models_available = {
     "BERT (EN)": "bert-base-nli-mean-tokens",
     "RoBERTa (EN)": "roberta-base-nli-stsb-mean-tokens",
     "MiniLM (Multilingual)": "sentence-transformers/all-MiniLM-L6-v2",
-
-    # Новые русские модели ↓↓↓
     "RuSBERT (RU)": "sberbank-ai/sbert_large_nlu_ru",
     "mUSE Multilingual": "distiluse-base-multilingual-cased-v2"
 }
@@ -35,7 +30,7 @@ def load_model(name):
     return SentenceTransformer(models_available[name])
 
 # ==========================================================
-# 1) Ввод вручную (РУЧНОЙ)
+# 1) Ввод вручную
 # ==========================================================
 st.subheader("Ввод вручную")
 
@@ -61,7 +56,8 @@ if st.button("Сравнить"):
             results[model_name] = sim
 
         st.subheader("Результаты:")
-        st.write(results)
+        for name, sim in results.items():
+            st.write(f"**{name}**: {sim:.3f}")
         st.bar_chart(results)
 
 # ==========================================================
@@ -107,7 +103,7 @@ if uploaded_file:
             st.info("Сохранено в data/results.csv")
 
             if "score" in df.columns:
-                st.subheader("Метрики качества")
+                st.subheader("Метрики качества моделей")
                 for model_name in csv_models:
                     y_true = df["score"]
                     y_pred = results_df[f"{model_name}_similarity"]
@@ -154,11 +150,9 @@ if st.button("Загрузить датасет"):
             "label": "score"
         }, inplace=True)
 
-   elif dataset_choice == "RuSTS (RU)":
-    data = load_dataset("ai-forever/ru-stsbenchmark-sts", split="test")
-    df = data.to_pandas()
-    df.rename(columns={"similarity_score": "score"}, inplace=True)
-
+    elif dataset_choice == "RuSTS (RU)":
+        data = load_dataset("mteb/RuSTSBenchmarkSTS", split="test")
+        df = data.to_pandas()
 
     st.success("Датасет загружен!")
     st.dataframe(df.head())
@@ -171,7 +165,6 @@ if st.button("Загрузить датасет"):
 
     if st.button("Анализировать датасет"):
         results_df = df.copy()
-
         for model_name in hf_models:
             model = load_model(model_name)
             sims = [
@@ -189,8 +182,7 @@ if st.button("Загрузить датасет"):
         if not os.path.exists("data"):
             os.makedirs("data")
         results_df.to_csv("data/results_hf.csv", index=False)
-
-        st.info("Результаты сохранены в data/results_hf.csv")
+        st.info("Сохранено в data/results_hf.csv")
 
         st.subheader("Метрики (регрессия)")
         for model_name in hf_models:
@@ -213,8 +205,3 @@ if st.button("Загрузить датасет"):
             MAE: **{mae:.4f}**  
             R²: **{r2:.4f}**
             """)
-
-
-
-
-
