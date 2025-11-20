@@ -1,8 +1,11 @@
 streamlit
 pandas
-sentence-transformers
 datasets
-scipy
+sentence-transformers
+transformers
 torch
 scikit-learn
+scipy
+
+
 
