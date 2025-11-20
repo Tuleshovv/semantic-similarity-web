@@ -37,6 +37,14 @@ def load_model(name):
         return SentenceTransformer('sentence-transformers/xlm-r-bert-base-nli-stsb-mean-tokens')
 
 # ==========================================================
+# Session state для датасета и обучения
+# ==========================================================
+if "dataset_df" not in st.session_state:
+    st.session_state.dataset_df = None
+if "train_clicked" not in st.session_state:
+    st.session_state.train_clicked = False
+
+# ==========================================================
 # 1) Ввод вручную
 # ==========================================================
 st.subheader("Ввод предложений вручную")
@@ -98,7 +106,6 @@ if uploaded_file:
             results_df.to_csv("data/results.csv", index=False)
             st.info("Результаты сохранены в data/results.csv")
 
-            # Метрики, если есть score
             if "score" in df_csv.columns:
                 st.subheader("Regression Metrics")
                 metrics_list = []
@@ -129,12 +136,11 @@ if uploaded_file:
 # ==========================================================
 st.subheader("HuggingFace датасеты и обучение модели")
 dataset_choice = st.selectbox("Выберите датасет:", ["STS Benchmark (EN)", "RuSTS (RU)"])
-
-if "train_clicked" not in st.session_state:
-    st.session_state.train_clicked = False
+model_to_train = st.selectbox("Выберите модель для обучения:", models_available, key="train_model")
+epochs = st.number_input("Количество эпох:", min_value=1, max_value=10, value=3, step=1)
 
 if st.button("Загрузить датасет"):
-    st.session_state.train_clicked = False  # сброс для нового датасета
+    st.session_state.train_clicked = False
     if dataset_choice == "STS Benchmark (EN)":
         data = load_dataset("stsb_multi_mt", name="en")
         df = data["train"].to_pandas()
@@ -146,23 +152,23 @@ if st.button("Загрузить датасет"):
         df.rename(columns={"sentence1":"sentence1","sentence2":"sentence2","similarity_score":"score"}, inplace=True)
         df["score"] = df["score"] / 5.0
 
+    st.session_state.dataset_df = df
     st.success(f"{dataset_choice} загружен! Всего строк: {len(df)}")
     st.dataframe(df.head())
 
-model_to_train = st.selectbox("Выберите модель для обучения:", models_available, key="train_model")
-epochs = st.number_input("Количество эпох:", min_value=1, max_value=10, value=3, step=1)
-
 if st.button("Обучить модель"):
-    st.session_state.train_clicked = True
+    if st.session_state.dataset_df is None:
+        st.warning("Сначала загрузите датасет!")
+    else:
+        st.session_state.train_clicked = True
 
 if st.session_state.train_clicked:
+    df = st.session_state.dataset_df
     st.info("Обучение модели... ⏳")
     model = load_model(model_to_train)
 
-    # Создание InputExample
-    train_examples = [InputExample(texts=[row["sentence1"], row["sentence2"]], label=row["score"]) 
+    train_examples = [InputExample(texts=[row["sentence1"], row["sentence2"]], label=row["score"])
                       for _, row in df.iterrows()]
-
     train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
     train_loss = losses.CosineSimilarityLoss(model=model)
 
