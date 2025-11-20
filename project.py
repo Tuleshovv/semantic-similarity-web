@@ -2,54 +2,58 @@ import streamlit as st
 import pandas as pd
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer, util
+from sklearn.metrics import (
+    mean_squared_error, mean_absolute_error, r2_score
+)
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
 import os
 
-# ---------------------------------------
-# Фронтенд часть
-# ---------------------------------------
 st.set_page_config(page_title="Semantic Text Similarity", layout="wide")
 st.title("Semantic Text Similarity 🌐")
-st.write("Сравнивайте смысловое сходство предложений: вручную, через CSV или через HuggingFace датасеты.")
 
-# ---------------------------------------
-# Модели
-# ---------------------------------------
-models_available = ["BERT", "RoBERTa", "MiniLM"]
+st.write("""
+Сравнение смыслового сходства предложений.  
+Работает с английскими и русскими датасетами, поддерживает ввод вручную и загрузку CSV.
+""")
+
+# -------------------------
+# Модели (тезисно)
+# -------------------------
+models_available = {
+    "BERT (EN)": "bert-base-nli-mean-tokens",
+    "RoBERTa (EN)": "roberta-base-nli-stsb-mean-tokens",
+    "MiniLM (Multilingual)": "sentence-transformers/all-MiniLM-L6-v2",
+
+    # Новые русские модели ↓↓↓
+    "RuSBERT (RU)": "sberbank-ai/sbert_large_nlu_ru",
+    "mUSE Multilingual": "distiluse-base-multilingual-cased-v2"
+}
 
 @st.cache_resource
 def load_model(name):
-    if name == "BERT":
-        return SentenceTransformer('bert-base-nli-mean-tokens')
-    elif name == "RoBERTa":
-        return SentenceTransformer('roberta-base-nli-stsb-mean-tokens')
-    return SentenceTransformer('all-MiniLM-L6-v2')
-
+    return SentenceTransformer(models_available[name])
 
 # ==========================================================
-# 1) ВВОД ВРУЧНУЮ
+# 1) Ввод вручную (РУЧНОЙ)
 # ==========================================================
-st.header("1) Ввод предложений вручную")
+st.subheader("Ввод вручную")
 
-sent1 = st.text_area("Предложение 1:", key="manual_s1")
-sent2 = st.text_area("Предложение 2:", key="manual_s2")
+sent1 = st.text_area("Предложение 1:", "")
+sent2 = st.text_area("Предложение 2:", "")
 
-models_manual = st.multiselect(
-    "Выберите модели:",
-    models_available,
-    default=models_available,
-    key="manual_models"
+manual_models = st.multiselect(
+    "Выберите модели:", list(models_available.keys()),
+    default=["MiniLM (Multilingual)", "RuSBERT (RU)"],
+    key="manual"
 )
 
-if st.button("Сравнить вручную"):
-    if not sent1 or not sent2:
-        st.warning("Введите оба предложения!")
+if st.button("Сравнить"):
+    if sent1.strip() == "" or sent2.strip() == "":
+        st.error("Введите оба предложения!")
     else:
         results = {}
-
-        for model_name in models_manual:
+        for model_name in manual_models:
             model = load_model(model_name)
             emb1 = model.encode(sent1, convert_to_tensor=True)
             emb2 = model.encode(sent2, convert_to_tensor=True)
@@ -57,67 +61,56 @@ if st.button("Сравнить вручную"):
             results[model_name] = sim
 
         st.subheader("Результаты:")
-
-        for m, v in results.items():
-            st.write(f"**{m}:** {v:.3f}")
-
+        st.write(results)
         st.bar_chart(results)
 
-
 # ==========================================================
-# 2) CSV ДАТАСЕТ
+# 2) Загрузка CSV
 # ==========================================================
-st.header("2) Анализ датасета CSV")
+st.subheader("Загрузка CSV датасета")
 
-uploaded = st.file_uploader("Загрузить CSV", type="csv")
+uploaded_file = st.file_uploader("CSV файл:", type="csv")
 
-if uploaded:
-    df = pd.read_csv(uploaded)
-    st.write("Предпросмотр CSV:")
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.write("Предпросмотр данных:")
     st.dataframe(df.head())
 
-    models_csv = st.multiselect(
-        "Выберите модели:",
-        models_available,
-        default=models_available,
-        key="csv_models"
+    csv_models = st.multiselect(
+        "Выберите модели:", list(models_available.keys()),
+        default=["MiniLM (Multilingual)", "RuSBERT (RU)"],
+        key="csv"
     )
 
-    if st.button("Анализировать CSV"):
-        if not all(col in df.columns for col in ["sentence1", "sentence2"]):
-            st.error("CSV должен содержать колонки: sentence1, sentence2")
+    if st.button("Анализ CSV"):
+        if not {"sentence1", "sentence2"}.issubset(df.columns):
+            st.error("CSV должен содержать столбцы: sentence1, sentence2")
         else:
-            st.info("Вычисление сходства...")
-
             results_df = df.copy()
-
-            # Модельные прогнозы
-            for model_name in models_csv:
+            for model_name in csv_models:
                 model = load_model(model_name)
-                sims = []
-                for s1, s2 in zip(df["sentence1"], df["sentence2"]):
-                    emb1 = model.encode(s1, convert_to_tensor=True)
-                    emb2 = model.encode(s2, convert_to_tensor=True)
-                    sims.append(float(util.cos_sim(emb1, emb2)))
+                sims = [
+                    float(util.cos_sim(
+                        model.encode(s1, convert_to_tensor=True),
+                        model.encode(s2, convert_to_tensor=True)
+                    ))
+                    for s1, s2 in zip(df["sentence1"], df["sentence2"])
+                ]
                 results_df[f"{model_name}_similarity"] = sims
 
             st.success("Готово!")
             st.dataframe(results_df.head())
 
-            # Сохранение
-            os.makedirs("data", exist_ok=True)
+            if not os.path.exists("data"):
+                os.makedirs("data")
             results_df.to_csv("data/results.csv", index=False)
-            st.info("Файл сохранён: data/results.csv")
+            st.info("Сохранено в data/results.csv")
 
-            # Метрики (если есть score)
             if "score" in df.columns:
-                st.subheader("Метрики (регрессия)")
-
-                metrics = []
-                for model_name in models_csv:
+                st.subheader("Метрики качества")
+                for model_name in csv_models:
                     y_true = df["score"]
                     y_pred = results_df[f"{model_name}_similarity"]
-
                     pear = pearsonr(y_true, y_pred)[0]
                     spear = spearmanr(y_true, y_pred)[0]
                     mse = mean_squared_error(y_true, y_pred)
@@ -125,89 +118,82 @@ if uploaded:
                     mae = mean_absolute_error(y_true, y_pred)
                     r2 = r2_score(y_true, y_pred)
 
-                    metrics.append({
-                        "Model": model_name,
-                        "Pearson": pear,
-                        "Spearman": spear,
-                        "MSE": mse,
-                        "RMSE": rmse,
-                        "MAE": mae,
-                        "R²": r2
-                    })
-
-                    st.write(f"### {model_name}")
-                    st.write(f"- **Pearson:** {pear:.4f}")
-                    st.write(f"- **Spearman:** {spear:.4f}")
-                    st.write(f"- **MSE:** {mse:.4f}")
-                    st.write(f"- **RMSE:** {rmse:.4f}")
-                    st.write(f"- **MAE:** {mae:.4f}")
-                    st.write(f"- **R² Score:** {r2:.4f}")
-
-                st.bar_chart(pd.DataFrame(metrics).set_index("Model"))
-
+                    st.write(f"""
+                    ### {model_name}
+                    Pearson: **{pear:.4f}**  
+                    Spearman: **{spear:.4f}**  
+                    MSE: **{mse:.4f}**  
+                    RMSE: **{rmse:.4f}**  
+                    MAE: **{mae:.4f}**  
+                    R²: **{r2:.4f}**
+                    """)
 
 # ==========================================================
-# 3) HUGGINGFACE DATASETS
+# 3) HuggingFace датасеты
 # ==========================================================
-st.header("3) Анализ HuggingFace датасетов")
+st.subheader("Готовые датасеты (HuggingFace)")
 
 dataset_choice = st.selectbox(
     "Выберите датасет:",
-    ["STS Benchmark", "Quora Question Pairs"],
-    key="hf_dataset"
+    ["STS Benchmark (EN)", "Quora Question Pairs (EN)", "RuSTS (RU)"],
+    key="hf_ds"
 )
 
 if st.button("Загрузить датасет"):
-    if dataset_choice == "STS Benchmark":
-        data = load_dataset("stsb_multi_mt", name="en")
-        df_hf = data["test"].to_pandas()
-        df_hf.rename(columns={"similarity_score": "score"}, inplace=True)
+    if dataset_choice == "STS Benchmark (EN)":
+        data = load_dataset("stsb_multi_mt", name="en")["test"]
+        df = data.to_pandas()
+        df.rename(columns={"similarity_score": "score"}, inplace=True)
 
-    else:  # QQP
-        data = load_dataset("glue", "qqp")
-        df_hf = data["validation"].to_pandas()
-        df_hf.rename(columns={
+    elif dataset_choice == "Quora Question Pairs (EN)":
+        data = load_dataset("glue", "qqp")["validation"]
+        df = data.to_pandas()
+        df.rename(columns={
             "question1": "sentence1",
             "question2": "sentence2",
             "label": "score"
         }, inplace=True)
 
-    st.success("Датасет загружен!")
-    st.dataframe(df_hf.head())
+    elif dataset_choice == "RuSTS (RU)":
+        data = load_dataset("ai-forever/ru-sts")["test"]
+        df = data.to_pandas()
+        df.rename(columns={"similarity_score": "score"}, inplace=True)
 
-    models_hf = st.multiselect(
-        "Выберите модели:",
-        models_available,
-        default=models_available,
+    st.success("Датасет загружен!")
+    st.dataframe(df.head())
+
+    hf_models = st.multiselect(
+        "Выберите модели:", list(models_available.keys()),
+        default=["RuSBERT (RU)", "mUSE Multilingual"],
         key="hf_models"
     )
 
-    if st.button("Анализировать HF датасет"):
-        st.info("Вычисление сходства...")
+    if st.button("Анализировать датасет"):
+        results_df = df.copy()
 
-        results_df = df_hf.copy()
-
-        for model_name in models_hf:
+        for model_name in hf_models:
             model = load_model(model_name)
-            sims = []
-            for s1, s2 in zip(df_hf["sentence1"], df_hf["sentence2"]):
-                emb1 = model.encode(s1, convert_to_tensor=True)
-                emb2 = model.encode(s2, convert_to_tensor=True)
-                sims.append(float(util.cos_sim(emb1, emb2)))
+            sims = [
+                float(util.cos_sim(
+                    model.encode(s1, convert_to_tensor=True),
+                    model.encode(s2, convert_to_tensor=True)
+                ))
+                for s1, s2 in zip(df["sentence1"], df["sentence2"])
+            ]
             results_df[f"{model_name}_similarity"] = sims
 
         st.success("Готово!")
         st.dataframe(results_df.head())
 
-        # save
-        os.makedirs("data", exist_ok=True)
-        results_df.to_csv("data/results.csv", index=False)
+        if not os.path.exists("data"):
+            os.makedirs("data")
+        results_df.to_csv("data/results_hf.csv", index=False)
+
+        st.info("Результаты сохранены в data/results_hf.csv")
 
         st.subheader("Метрики (регрессия)")
-        metrics = []
-
-        for model_name in models_hf:
-            y_true = df_hf["score"]
+        for model_name in hf_models:
+            y_true = df["score"]
             y_pred = results_df[f"{model_name}_similarity"]
 
             pear = pearsonr(y_true, y_pred)[0]
@@ -217,25 +203,16 @@ if st.button("Загрузить датасет"):
             mae = mean_absolute_error(y_true, y_pred)
             r2 = r2_score(y_true, y_pred)
 
-            metrics.append({
-                "Model": model_name,
-                "Pearson": pear,
-                "Spearman": spear,
-                "MSE": mse,
-                "RMSE": rmse,
-                "MAE": mae,
-                "R²": r2
-            })
+            st.write(f"""
+            ### {model_name}
+            Pearson: **{pear:.4f}**  
+            Spearman: **{spear:.4f}**  
+            MSE: **{mse:.4f}**  
+            RMSE: **{rmse:.4f}**  
+            MAE: **{mae:.4f}**  
+            R²: **{r2:.4f}**
+            """)
 
-            st.write(f"### {model_name}")
-            st.write(f"- **Pearson:** {pear:.4f}")
-            st.write(f"- **Spearman:** {spear:.4f}")
-            st.write(f"- **MSE:** {mse:.4f}")
-            st.write(f"- **RMSE:** {rmse:.4f}")
-            st.write(f"- **MAE:** {mae:.4f}")
-            st.write(f"- **R² Score:** {r2:.4f}")
-
-        st.bar_chart(pd.DataFrame(metrics).set_index("Model"))
 
 
 
