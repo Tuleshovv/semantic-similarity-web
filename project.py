@@ -136,10 +136,10 @@ if st.button("Загрузить датасет"):
         df.rename(columns={"sentence1":"sentence1","sentence2":"sentence2","similarity_score":"score"}, inplace=True)
         df["score"] = df["score"] / 5.0  # нормализация 0-1
     else:
-        data = load_dataset("ai-forever/ru-sts")["train"]
+        data = load_dataset("ai-forever/ru-stsbenchmark-sts", split="train")
         df = data.to_pandas()
         df.rename(columns={"sentence1":"sentence1","sentence2":"sentence2","similarity_score":"score"}, inplace=True)
-        df["score"] = df["score"] / 5.0
+        df["score"] = df["score"] / 5.0  # нормализация 0-1
 
     st.success(f"{dataset_choice} загружен! Всего строк: {len(df)}")
     st.dataframe(df.head())
@@ -172,4 +172,3 @@ if st.button("Загрузить датасет"):
         model.save(save_path)
         st.success(f"Модель обучена и сохранена в {save_path}")
         st.info("Теперь её можно использовать для ручного ввода или CSV!")
-
