@@ -154,10 +154,11 @@ if st.button("Загрузить датасет"):
             "label": "score"
         }, inplace=True)
 
-    elif dataset_choice == "RuSTS (RU)":
-        data = load_dataset("ai-forever/ru-sts")["test"]
-        df = data.to_pandas()
-        df.rename(columns={"similarity_score": "score"}, inplace=True)
+   elif dataset_choice == "RuSTS (RU)":
+    data = load_dataset("ai-forever/ru-stsbenchmark-sts", split="test")
+    df = data.to_pandas()
+    df.rename(columns={"similarity_score": "score"}, inplace=True)
+
 
     st.success("Датасет загружен!")
     st.dataframe(df.head())
@@ -212,6 +213,7 @@ if st.button("Загрузить датасет"):
             MAE: **{mae:.4f}**  
             R²: **{r2:.4f}**
             """)
+
 
 
 
