@@ -39,7 +39,7 @@ sent2 = st.text_area("Предложение 2:", "")
 
 manual_models = st.multiselect(
     "Выберите модели:", list(models_available.keys()),
-    default=["MiniLM (Multilingual)", "RuSBERT (RU)"],
+    default=list(models_available.keys()),  # все модели по умолчанию
     key="manual"
 )
 
@@ -74,7 +74,7 @@ if uploaded_file:
 
     csv_models = st.multiselect(
         "Выберите модели:", list(models_available.keys()),
-        default=["MiniLM (Multilingual)", "RuSBERT (RU)"],
+        default=list(models_available.keys()),  # все модели по умолчанию
         key="csv"
     )
 
@@ -159,7 +159,7 @@ if st.button("Загрузить датасет"):
 
     hf_models = st.multiselect(
         "Выберите модели:", list(models_available.keys()),
-        default=["RuSBERT (RU)", "mUSE Multilingual"],
+        default=list(models_available.keys()),  # все модели по умолчанию
         key="hf_models"
     )
 
