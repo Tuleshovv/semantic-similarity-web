@@ -151,14 +151,7 @@ if st.button("Загрузить выбранный датасет"):
         df = data["validation"].to_pandas()
         df.rename(columns={"question1": "sentence1", "question2": "sentence2", "label": "score"}, inplace=True)
 
-    elif dataset_choice == "RuSTS Benchmark (RU)":
-        try:
-            data = load_dataset("ai-forever/ru-stsbenchmark-sts")
-            df = pd.DataFrame(data["test"])
-            df.rename(columns={"sentence1": "sentence1", "sentence2": "sentence2", "similarity": "score"}, inplace=True)
-        except Exception as e:
-            st.error(f"Не удалось загрузить RuSTS Benchmark: {e}")
-            df = pd.DataFrame(columns=["sentence1", "sentence2", "score"])
+
 
     elif dataset_choice == "MTEB Human STS22 RU":
         try:
@@ -212,3 +205,4 @@ if st.button("Загрузить выбранный датасет"):
                 st.bar_chart(metrics_df.set_index("Model"))
         else:
             st.warning("Метрики не могут быть рассчитаны: отсутствует столбец 'score'")
+
