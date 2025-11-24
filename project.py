@@ -29,6 +29,7 @@ def load_model(name):
     else:  # RuSBERT (RU)
         return SentenceTransformer('DeepPavlov/rubert-base-cased-sentence')
 
+
 # ==========================================================
 # 1) Ввод вручную
 # ==========================================================
@@ -63,6 +64,7 @@ if st.button("Сравнить вручную"):
 
         st.bar_chart(results)
 
+
 # ==========================================================
 # 2) CSV
 # ==========================================================
@@ -74,12 +76,14 @@ if uploaded_file:
     st.dataframe(df.head())
 
     models_csv = st.multiselect("Выберите модели для CSV:", models_available, default=models_available, key="csv_models")
+
     if st.button("Вычислить сходство для CSV"):
         if not all(col in df.columns for col in ["sentence1", "sentence2"]):
             st.error("CSV должен содержать 'sentence1' и 'sentence2'")
         else:
             results_df = df.copy()
             st.info("Вычисление сходства... ⏳")
+
             for model_name in models_csv:
                 model = load_model(model_name)
                 sims = []
@@ -110,12 +114,14 @@ if uploaded_file:
                     mae = np.mean(np.abs(df["score"] - results_df[f"{model_name}_similarity"]))
                     r2 = 1 - (np.sum((df["score"] - results_df[f"{model_name}_similarity"])**2) /
                               np.sum((df["score"] - np.mean(df["score"]))**2))
+
                     metrics_list.append({
                         "Model": model_name, "Pearson": pear, "Spearman": spear,
                         "MSE": mse, "RMSE": rmse, "MAE": mae, "R2": r2
                     })
-                    st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}, MSE: {mse:.3f}, RMSE: {rmse:.3f}, MAE: {mae:.3f}, R²: {r2:.3f}")
+
                 st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
+
 
 # ==========================================================
 # 3) HuggingFace датасеты
@@ -128,24 +134,34 @@ if st.button("Загрузить выбранный датасет"):
         data = load_dataset("stsb_multi_mt", name="en")
         df = data["test"].to_pandas()
         df.rename(columns={"similarity_score": "score"}, inplace=True)
-        df["sentence1"] = df["sentence1"]
-        df["sentence2"] = df["sentence2"]
+
     elif dataset_choice == "Quora Question Pairs (QQP)":
         data = load_dataset("glue", "qqp")
         df = data["validation"].to_pandas()
-        df.rename(columns={"question1": "sentence1", "question2": "sentence2", "label": "score"}, inplace=True)
-    else:  # RuSTS
-        data = load_dataset("ai-forever/ru-sts")
-        df = pd.DataFrame(data["test"])
-        df.rename(columns={"sentence1": "sentence1", "sentence2": "sentence2", "similarity": "score"}, inplace=True)
+        df.rename(columns={
+            "question1": "sentence1",
+            "question2": "sentence2",
+            "label": "score"
+        }, inplace=True)
+
+    else:  # RuSTS (правильный, рабочий)
+        data = load_dataset("stat-rsu/STS-Ru")
+        df = data["test"].to_pandas()
+        df.rename(columns={
+            "s1": "sentence1",
+            "s2": "sentence2",
+            "label": "score"
+        }, inplace=True)
 
     st.success(f"{dataset_choice} загружен!")
     st.dataframe(df.head())
 
     models_hf = st.multiselect("Выберите модели:", models_available, default=models_available, key="hf_models")
+
     if st.button("Анализировать датасет"):
         results_df = df.copy()
         st.info("Вычисление сходства... ⏳")
+
         for model_name in models_hf:
             model = load_model(model_name)
             sims = []
@@ -167,6 +183,7 @@ if st.button("Загрузить выбранный датасет"):
         # Метрики
         st.subheader("Метрики качества моделей")
         metrics_list = []
+
         for model_name in models_hf:
             pear, _ = pearsonr(df["score"], results_df[f"{model_name}_similarity"])
             spear, _ = spearmanr(df["score"], results_df[f"{model_name}_similarity"])
@@ -175,9 +192,10 @@ if st.button("Загрузить выбранный датасет"):
             mae = np.mean(np.abs(df["score"] - results_df[f"{model_name}_similarity"]))
             r2 = 1 - (np.sum((df["score"] - results_df[f"{model_name}_similarity"])**2) /
                       np.sum((df["score"] - np.mean(df["score"]))**2))
+
             metrics_list.append({
                 "Model": model_name, "Pearson": pear, "Spearman": spear,
                 "MSE": mse, "RMSE": rmse, "MAE": mae, "R2": r2
             })
-            st.write(f"**{model_name}** — Pearson: {pear:.3f}, Spearman: {spear:.3f}, MSE: {mse:.3f}, RMSE: {rmse:.3f}, MAE: {mae:.3f}, R²: {r2:.3f}")
+
         st.bar_chart(pd.DataFrame(metrics_list).set_index("Model"))
