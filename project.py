@@ -103,7 +103,7 @@ if uploaded_file:
             for model_name in models_csv:
                 st.info(f"Вычисление сходства для {model_name}... ⏳")
                 model = load_model(model_name)
-                sims = compute_similarity_batch(model, df)
+                sims = compute_similarity_batch(model, results_df)
                 results_df[f"{model_name}_similarity"] = sims
 
             st.success("Готово!")
@@ -115,15 +115,20 @@ if uploaded_file:
             st.info("Результаты сохранены в data/results.csv")
             
             # Метрики
-            if "score" in df.columns:
+            if "score" in results_df.columns:
                 metrics_list = []
                 for model_name in models_csv:
-                    metrics = compute_metrics(df, f"{model_name}_similarity")
-                    metrics["Model"] = model_name
-                    metrics_list.append(metrics)
-                metrics_df = pd.DataFrame(metrics_list)
-                st.dataframe(metrics_df)
-                st.bar_chart(metrics_df.set_index("Model"))
+                    sim_col = f"{model_name}_similarity"
+                    if sim_col in results_df.columns:
+                        metrics = compute_metrics(results_df, sim_col)
+                        metrics["Model"] = model_name
+                        metrics_list.append(metrics)
+                if metrics_list:
+                    metrics_df = pd.DataFrame(metrics_list)
+                    st.dataframe(metrics_df)
+                    st.bar_chart(metrics_df.set_index("Model"))
+            else:
+                st.warning("Метрики не могут быть рассчитаны: отсутствует столбец 'score'")
 
 # -------------------------
 # 3️⃣ HuggingFace датасеты
@@ -155,7 +160,7 @@ if st.button("Загрузить выбранный датасет"):
         for model_name in models_hf:
             st.info(f"Вычисление сходства для {model_name}... ⏳")
             model = load_model(model_name)
-            sims = compute_similarity_batch(model, df)
+            sims = compute_similarity_batch(model, results_df)
             results_df[f"{model_name}_similarity"] = sims
 
         st.success("Готово!")
@@ -167,12 +172,17 @@ if st.button("Загрузить выбранный датасет"):
         st.info("Результаты сохранены в data/results.csv")
 
         # Метрики
-        metrics_list = []
-        if "score" in df.columns:
+        if "score" in results_df.columns:
+            metrics_list = []
             for model_name in models_hf:
-                metrics = compute_metrics(df, f"{model_name}_similarity")
-                metrics["Model"] = model_name
-                metrics_list.append(metrics)
-            metrics_df = pd.DataFrame(metrics_list)
-            st.dataframe(metrics_df)
-            st.bar_chart(metrics_df.set_index("Model"))
+                sim_col = f"{model_name}_similarity"
+                if sim_col in results_df.columns:
+                    metrics = compute_metrics(results_df, sim_col)
+                    metrics["Model"] = model_name
+                    metrics_list.append(metrics)
+            if metrics_list:
+                metrics_df = pd.DataFrame(metrics_list)
+                st.dataframe(metrics_df)
+                st.bar_chart(metrics_df.set_index("Model"))
+        else:
+            st.warning("Метрики не могут быть рассчитаны: отсутствует столбец 'score'")
