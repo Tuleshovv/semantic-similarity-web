@@ -135,8 +135,6 @@ st.subheader("3️⃣ HuggingFace датасеты")
 dataset_choice = st.selectbox("Выберите датасет:", [
     "STS Benchmark (EN)", 
     "Quora Question Pairs (QQP)", 
-    "RuSTS Benchmark (RU)", 
-    "MTEB Human STS22 RU",
     "All-Multilingual STS"
 ], key="dataset_choice")
 
@@ -150,17 +148,6 @@ if st.button("Загрузить выбранный датасет"):
         data = load_dataset("glue", "qqp")
         df = data["validation"].to_pandas()
         df.rename(columns={"question1": "sentence1", "question2": "sentence2", "label": "score"}, inplace=True)
-
-
-
-    elif dataset_choice == "MTEB Human STS22 RU":
-        try:
-            data = load_dataset("mteb/mteb-human-sts22-sts", name="ru")
-            df = pd.DataFrame(data["test"])
-            df.rename(columns={"string1": "sentence1", "string2": "sentence2", "score": "score"}, inplace=True)
-        except Exception as e:
-            st.error(f"Не удалось загрузить MTEB Human STS22 RU: {e}")
-            df = pd.DataFrame(columns=["sentence1", "sentence2", "score"])
 
     elif dataset_choice == "All-Multilingual STS":
         try:
@@ -205,4 +192,5 @@ if st.button("Загрузить выбранный датасет"):
                 st.bar_chart(metrics_df.set_index("Model"))
         else:
             st.warning("Метрики не могут быть рассчитаны: отсутствует столбец 'score'")
+
 
