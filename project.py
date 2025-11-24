@@ -109,12 +109,10 @@ if uploaded_file:
             st.success("Готово!")
             st.dataframe(results_df.head())
 
-            # Сохранение
             os.makedirs("data", exist_ok=True)
             results_df.to_csv("data/results.csv", index=False)
             st.info("Результаты сохранены в data/results.csv")
             
-            # Метрики
             if "score" in results_df.columns:
                 metrics_list = []
                 for model_name in models_csv:
@@ -134,21 +132,51 @@ if uploaded_file:
 # 3️⃣ HuggingFace датасеты
 # -------------------------
 st.subheader("3️⃣ HuggingFace датасеты")
-dataset_choice = st.selectbox("Выберите датасет:", ["STS Benchmark", "Quora Question Pairs (QQP)", "RuSTS (RU)"], key="dataset_choice")
+dataset_choice = st.selectbox("Выберите датасет:", [
+    "STS Benchmark (EN)", 
+    "Quora Question Pairs (QQP)", 
+    "RuSTS Benchmark (RU)", 
+    "MTEB Human STS22 RU",
+    "All-Multilingual STS"
+], key="dataset_choice")
 
 if st.button("Загрузить выбранный датасет"):
-    if dataset_choice == "STS Benchmark":
+    if dataset_choice == "STS Benchmark (EN)":
         data = load_dataset("stsb_multi_mt", name="en")
         df = data["test"].to_pandas()
         df.rename(columns={"similarity_score": "score"}, inplace=True)
+
     elif dataset_choice == "Quora Question Pairs (QQP)":
         data = load_dataset("glue", "qqp")
         df = data["validation"].to_pandas()
         df.rename(columns={"question1": "sentence1", "question2": "sentence2", "label": "score"}, inplace=True)
-    else:  # RuSTS
-        data = load_dataset("ai-forever/ru-sts")
-        df = pd.DataFrame(data["test"])
-        df.rename(columns={"sentence1": "sentence1", "sentence2": "sentence2", "similarity": "score"}, inplace=True)
+
+    elif dataset_choice == "RuSTS Benchmark (RU)":
+        try:
+            data = load_dataset("ai-forever/ru-stsbenchmark-sts")
+            df = pd.DataFrame(data["test"])
+            df.rename(columns={"sentence1": "sentence1", "sentence2": "sentence2", "similarity": "score"}, inplace=True)
+        except Exception as e:
+            st.error(f"Не удалось загрузить RuSTS Benchmark: {e}")
+            df = pd.DataFrame(columns=["sentence1", "sentence2", "score"])
+
+    elif dataset_choice == "MTEB Human STS22 RU":
+        try:
+            data = load_dataset("mteb/mteb-human-sts22-sts", name="ru")
+            df = pd.DataFrame(data["test"])
+            df.rename(columns={"string1": "sentence1", "string2": "sentence2", "score": "score"}, inplace=True)
+        except Exception as e:
+            st.error(f"Не удалось загрузить MTEB Human STS22 RU: {e}")
+            df = pd.DataFrame(columns=["sentence1", "sentence2", "score"])
+
+    elif dataset_choice == "All-Multilingual STS":
+        try:
+            data = load_dataset("stsb_multi_mt", name="all")
+            df = data["test"].to_pandas()
+            df.rename(columns={"similarity_score": "score"}, inplace=True)
+        except Exception as e:
+            st.error(f"Не удалось загрузить Multilingual STS: {e}")
+            df = pd.DataFrame(columns=["sentence1", "sentence2", "score"])
 
     st.success(f"{dataset_choice} загружен!")
     st.dataframe(df.head())
@@ -166,12 +194,10 @@ if st.button("Загрузить выбранный датасет"):
         st.success("Готово!")
         st.dataframe(results_df.head())
 
-        # Сохранение
         os.makedirs("data", exist_ok=True)
         results_df.to_csv("data/results.csv", index=False)
         st.info("Результаты сохранены в data/results.csv")
 
-        # Метрики
         if "score" in results_df.columns:
             metrics_list = []
             for model_name in models_hf:
