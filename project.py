@@ -12,27 +12,27 @@ st.title("Semantic Text Similarity 🌐")
 st.write("Сравнивайте смысловое сходство предложений. CSV, ручной ввод или HuggingFace датасеты.")
 
 # -------------------------
-# Моделі
+# Модельдер
 # -------------------------
-models_available = ["BERT", "RoBERTa", "MiniLM", "MiniLM (Multilingual)", "RuSBERT (RU)"]
+models_available = ["MiniLM", "BERT", "RoBERTa", "MiniLM (Multilingual)", "RuSBERT (RU)"]
 
 @st.cache_resource
 def load_model(name):
-    if name == "BERT":
+    if name == "MiniLM":
+        return SentenceTransformer('all-MiniLM-L6-v2')
+    elif name == "BERT":
         return SentenceTransformer('bert-base-nli-mean-tokens')
     elif name == "RoBERTa":
         return SentenceTransformer('roberta-base-nli-stsb-mean-tokens')
-    elif name == "MiniLM":
-        return SentenceTransformer('all-MiniLM-L6-v2')
     elif name == "MiniLM (Multilingual)":
         return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
     else:  # RuSBERT
         return SentenceTransformer('DeepPavlov/rubert-base-cased-sentence')
 
 # -------------------------
-# Функциялар
+# Batch similarity функциясы
 # -------------------------
-def compute_similarity_batch(model, df, col1="sentence1", col2="sentence2", batch_size=8):
+def compute_similarity_batch(model, df, col1="sentence1", col2="sentence2", batch_size=4):
     sims = []
     for i in range(0, len(df), batch_size):
         batch_s1 = df[col1].iloc[i:i+batch_size].tolist()
@@ -45,6 +45,9 @@ def compute_similarity_batch(model, df, col1="sentence1", col2="sentence2", batc
         torch.cuda.empty_cache()
     return sims
 
+# -------------------------
+# Метрики функциясы
+# -------------------------
 def compute_metrics(df, sim_col):
     pear, _ = pearsonr(df["score"], df[sim_col])
     spear, _ = spearmanr(df["score"], df[sim_col])
@@ -60,7 +63,7 @@ def compute_metrics(df, sim_col):
 st.subheader("1️⃣ Ввод предложений вручную")
 sent1 = st.text_area("Предложение 1", "")
 sent2 = st.text_area("Предложение 2", "")
-models_manual = st.multiselect("Выберите модели:", models_available, default=models_available, key="manual")
+models_manual = st.multiselect("Выберите модели (максимум 2):", models_available, default=["MiniLM"], key="manual", max_selections=2)
 
 if st.button("Сравнить вручную"):
     if not sent1.strip() or not sent2.strip():
@@ -87,9 +90,9 @@ uploaded_file = st.file_uploader("Выберите CSV файл", type="csv", ke
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     st.dataframe(df.head())
-    models_csv = st.multiselect("Выберите модели:", models_available, default=models_available, key="csv_models")
+    models_csv = st.multiselect("Выберите модели (максимум 2):", models_available, default=["MiniLM"], key="csv_models", max_selections=2)
 
-    max_rows = st.number_input("Максимум строк для обработки:", min_value=50, max_value=len(df), value=min(500, len(df)))
+    max_rows = st.number_input("Максимум строк для обработки CSV:", min_value=50, max_value=len(df), value=min(500))
     df = df.head(max_rows)
 
     if st.button("Вычислить сходство для CSV"):
@@ -100,7 +103,6 @@ if uploaded_file:
             sims = compute_similarity_batch(model, results_df)
             results_df[f"{model_name}_similarity"] = sims
 
-            # Метрики
             if "score" in df.columns:
                 metrics = compute_metrics(results_df, f"{model_name}_similarity")
                 st.write(f"**{model_name}** — Pearson: {metrics['Pearson']:.3f}, Spearman: {metrics['Spearman']:.3f}, MSE: {metrics['MSE']:.3f}, RMSE: {metrics['RMSE']:.3f}, MAE: {metrics['MAE']:.3f}, R²: {metrics['R2']:.3f}")
@@ -115,9 +117,8 @@ if uploaded_file:
 # -------------------------
 st.subheader("3️⃣ HuggingFace датасеты")
 dataset_choice = st.selectbox("Выберите датасет:", ["STS Benchmark", "Quora Question Pairs (QQP)", "RuSTS (RU)"])
-
-max_rows_hf = st.number_input("Максимум строк для обработки HuggingFace:", min_value=50, max_value=2000, value=500, key="hf_max_rows")
-models_hf = st.multiselect("Выберите модели для анализа:", models_available, default=models_available, key="hf_models")
+models_hf = st.multiselect("Выберите модели (максимум 2):", models_available, default=["MiniLM"], key="hf_models", max_selections=2)
+max_rows_hf = st.number_input("Максимум строк для HuggingFace:", min_value=50, max_value=2000, value=500, key="hf_max_rows")
 
 if st.button("Загрузить и проанализировать датасет"):
     try:
@@ -145,7 +146,6 @@ if st.button("Загрузить и проанализировать датас�
             sims = compute_similarity_batch(model, results_df)
             results_df[f"{model_name}_similarity"] = sims
 
-            # Метрики
             metrics = compute_metrics(results_df, f"{model_name}_similarity")
             st.write(f"**{model_name}** — Pearson: {metrics['Pearson']:.3f}, Spearman: {metrics['Spearman']:.3f}, MSE: {metrics['MSE']:.3f}, RMSE: {metrics['RMSE']:.3f}, MAE: {metrics['MAE']:.3f}, R²: {metrics['R2']:.3f}")
 
